@@ -1,4 +1,4 @@
-import { getDatabase, ref, set, onValue, remove } from "firebase/database";
+import { getDatabase, ref, set, onValue, remove, update } from "firebase/database";
 import { app } from '../firebase';
 import { useEffect, useState } from "react";
 
@@ -9,6 +9,8 @@ const AddData = () => {
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
     const [studentData, setStudentData] = useState<{ [key: string]: { studentName: string; studentPhoneNumber: string } }>({});
+    const [isUpdateMode, setIsUpdateMode] = useState(false); 
+
     const inputHandler = async (event: React.FormEvent) => {
         event.preventDefault();
         setLoading(true);
@@ -16,42 +18,63 @@ const AddData = () => {
 
         try {
             const db = getDatabase(app);
-            await set(ref(db, 'student/' + rollNo), {
-                studentName: name,
-                studentPhoneNumber: phoneNo,
-            });
-            setMessage("Data added successfully!");
+            const studentRef = ref(db, 'student/' + rollNo);
+
+            if (isUpdateMode) {
+                await update(studentRef, {
+                    studentName: name,
+                    studentPhoneNumber: phoneNo,
+                });
+                setMessage("Data updated successfully!");
+            } else {
+                await set(studentRef, {
+                    studentName: name,
+                    studentPhoneNumber: phoneNo,
+                });
+                setMessage("Data added successfully!");
+            }
         } catch (error) {
-            setMessage("Failed to add data. Please try again.");
+            setMessage("Failed to submit data. Please try again.");
             console.error("Error writing to database:", error);
         } finally {
             setLoading(false);
             setRollNo('');
             setName('');
             setPhoneNo('');
+            setIsUpdateMode(false);
         }
     };
 
     useEffect(() => {
-        const db = getDatabase(app)
-        const studentRef = ref(db, "student")
-        const unsubscribe = onValue(studentRef, (snapShort) => {
-            const data = snapShort.val()
-            console.log(data);
-
-            setStudentData(data)
-
-        })
+        const db = getDatabase(app);
+        const studentRef = ref(db, "student");
+        const unsubscribe = onValue(studentRef, (snapshot) => {
+            const data = snapshot.val();
+            setStudentData(data || {});
+        });
         return () => unsubscribe();
-    }, [])
+    }, []);
 
+    const handleDeleteData = (key: string) => {
+        const db = getDatabase(app);
+        const studentRef = ref(db, "student/" + key);
+        remove(studentRef).then(() => {
+            setMessage("Data deleted successfully!");
+        }).catch((error) => {
+            setMessage("Failed to delete data.");
+            console.error("Error deleting data:", error);
+        });
+    };
 
-    const handelDeleteData = (key: string) => {
-        const db = getDatabase(app)
-        const studentRef = ref(db, "student/" + key)
-        remove(studentRef)
-    }
-
+    const handleUpdateData = (key: string) => {
+        const student = studentData[key];
+        if (student) {
+            setRollNo(key);
+            setName(student.studentName);
+            setPhoneNo(student.studentPhoneNumber);
+            setIsUpdateMode(true); 
+        }
+    };
 
     return (
         <div className="flex flex-col items-center mt-8">
@@ -67,6 +90,7 @@ const AddData = () => {
                             className="px-12 py-2 bg-slate-300 rounded-xl outline-none"
                             value={rollNo}
                             onChange={(e) => setRollNo(e.target.value)}
+                            disabled={isUpdateMode}
                         />
                         <input
                             type="text"
@@ -88,32 +112,36 @@ const AddData = () => {
                                 className="px-10 py-2 bg-blue-200 rounded-xl"
                                 disabled={loading}
                             >
-                                Submit
+                                {isUpdateMode ? "Update" : "Submit"}
                             </button>
                         </div>
                     </form>
                 </>
             )}
             <div className="mt-6 w-full max-w-lg">
-                {Object.entries(studentData).slice().reverse().map(([key, item]) => (
-                    <h2 key={key} className="mb-2 p-2 bg-gray-100 rounded-lg shadow-md   ">
-                        <div>
-                            <p><strong>Name :</strong>{item.studentName}</p>
-                            <p><strong>Phone Number :</strong>{item.studentPhoneNumber}</p>
-                            <span className="flex justify-end">
-                                <button className=" px-5 py-2 bg-red-400 text-white rounded-xl"
-                                    onClick={() => handelDeleteData(key)}
-                                >Delete</button>
-                            </span>
+                {Object.entries(studentData).reverse().map(([key, item]) => (
+                    <div key={key} className="mb-2 p-2 bg-gray-100 rounded-lg shadow-md">
+                        <p><strong>Name:</strong> {item.studentName}</p>
+                        <p><strong>Phone Number:</strong> {item.studentPhoneNumber}</p>
+                        <div className="flex justify-end space-x-4">
+                            <button
+                                className="px-5 py-2 bg-red-400 text-white rounded-xl"
+                                onClick={() => handleDeleteData(key)}
+                            >
+                                Delete
+                            </button>
+                            <button
+                                className="px-5 py-2 bg-green-400 text-white rounded-xl"
+                                onClick={() => handleUpdateData(key)}
+                            >
+                                Update
+                            </button>
                         </div>
-                    </h2>
-
-
+                    </div>
                 ))}
-
             </div>
         </div>
     );
-}
+};
 
 export default AddData;
