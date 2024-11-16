@@ -51,6 +51,8 @@ const AddData = () => {
         const unsubscribe = onValue(studentRef, (snapshot) => {
             const data = snapshot.val();
             setStudentData(data || {});
+            console.log(data);
+            
         });
         return () => unsubscribe();
     }, []);
